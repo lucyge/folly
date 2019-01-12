@@ -17,6 +17,9 @@
 
 #include <atomic>
 
+#if 2
+#include <folly/Function.h>
+#endif
 #include <folly/detail/Futex.h>
 #include <folly/fibers/TimeoutController.h>
 
@@ -45,6 +48,10 @@ class Baton {
    */
   void wait();
 
+#if 2
+  void lwait(folly::Function<void(int)> f);
+#endif
+
   /**
    * Put active fiber to sleep indefinitely. However, timeoutHandler may
    * be used elsewhere on the same thread in order to schedule a wakeup
@@ -63,6 +70,11 @@ class Baton {
   template <typename F>
   void wait(F&& mainContextFunc);
 
+#if 2
+  template<typename F>
+  void lwait(folly::Function<void(int)> f, F&& mainContextFunc);
+#endif
+
   /**
    * This is here only not break tao/locks. Please don't use it, because it is
    * inefficient when used on Fibers.
@@ -79,6 +91,10 @@ class Baton {
    */
   bool timed_wait(TimeoutController::Duration timeout);
 
+#if 2
+  bool timed_lwait(folly::Function<void(int)> f, TimeoutController::Duration timeout);
+#endif
+
   /**
    * Puts active fiber to sleep. Returns when post is called.
    *
@@ -90,6 +106,11 @@ class Baton {
    */
   template <typename F>
   bool timed_wait(TimeoutController::Duration timeout, F&& mainContextFunc);
+
+#if 2
+  template <typename F>
+  bool timed_lwait(folly::Function<void(int)> f, TimeoutController::Duration timeout, F&& mainContextFunc);
+#endif
 
   /**
    * Checks if the baton has been posted without blocking.
@@ -159,9 +180,17 @@ class Baton {
   void postHelper(intptr_t new_value);
   void postThread();
   void waitThread();
+#if 2
+  void lwaitThread(folly::Function<void(int)> f);
+#endif
 
   template <typename F>
   inline void waitFiber(FiberManager& fm, F&& mainContextFunc);
+
+#if 2
+  template <typename F>
+  inline void lwaitFiber(folly::Function<void(int)> f, FiberManager& fm, F&& mainContextFunc);
+#endif
   /**
    * Spin for "some time" (see discussion on PreBlockAttempts) waiting
    * for a post.
@@ -171,6 +200,10 @@ class Baton {
   bool spinWaitForEarlyPost();
 
   bool timedWaitThread(TimeoutController::Duration timeout);
+
+#if 2
+  bool timedLWaitThread(folly::Function<void(int)> f, TimeoutController::Duration timeout);
+#endif
 
   static constexpr intptr_t NO_WAITER = 0;
   static constexpr intptr_t POSTED = -1;

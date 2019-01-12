@@ -42,6 +42,19 @@ void Baton::wait(F&& mainContextFunc) {
   return waitFiber(*fm, std::forward<F>(mainContextFunc));
 }
 
+#if 2
+template <typename F>
+void Baton::lwait(folly::Function<void(int)> f, F&& mainContextFunc) {
+  auto fm = FiberManager::getFiberManagerUnsafe();
+  if (!fm || !fm->activeFiber_) {
+    mainContextFunc();
+    return lwaitThread(std::move(f));
+  }
+
+  return lwaitFiber(std::move(f), *fm, std::forward<F>(mainContextFunc));
+}
+#endif
+
 template <typename F>
 void Baton::waitFiber(FiberManager& fm, F&& mainContextFunc) {
   auto& waitingFiber = waitingFiber_;
@@ -65,6 +78,32 @@ void Baton::waitFiber(FiberManager& fm, F&& mainContextFunc) {
   fm.awaitFunc_ = std::ref(f);
   fm.activeFiber_->preempt(Fiber::AWAITING);
 }
+
+#if 2
+template <typename F>
+void Baton::lwaitFiber(folly::Function<void(int)> fn, FiberManager& fm, F&& mainContextFunc) {
+  auto& waitingFiber = waitingFiber_;
+  auto f = [&mainContextFunc, &waitingFiber](Fiber& fiber) mutable {
+    auto baton_fiber = waitingFiber.load();
+    do {
+      if (LIKELY(baton_fiber == NO_WAITER)) {
+        continue;
+      } else if (baton_fiber == POSTED || baton_fiber == TIMEOUT) {
+        fiber.resume();
+        break;
+      } else {
+        throw std::logic_error("Some Fiber is already waiting on this Baton.");
+      }
+    } while (!waitingFiber.compare_exchange_weak(
+        baton_fiber, reinterpret_cast<intptr_t>(&fiber)));
+
+    mainContextFunc();
+  };
+
+  fm.awaitFunc_ = std::ref(f);
+  fm.activeFiber_->lpreempt(Fiber::AWAITING, std::move(fn));
+}
+#endif
 
 template <typename F>
 bool Baton::timed_wait(
@@ -97,6 +136,42 @@ bool Baton::timed_wait(
 
   return posted;
 }
+
+#if 2
+template <typename F>
+bool Baton::timed_lwait(
+    folly::Function<void(int)> fn,
+    TimeoutController::Duration timeout,
+    F&& mainContextFunc) {
+  auto fm = FiberManager::getFiberManagerUnsafe();
+
+  if (!fm || !fm->activeFiber_) {
+    mainContextFunc();
+    return timedLWaitThread(std::move(fn), timeout);
+  }
+
+  auto& baton = *this;
+  bool canceled = false;
+  auto timeoutFunc = [&baton, &canceled]() mutable {
+    baton.postHelper(TIMEOUT);
+    canceled = true;
+  };
+
+  auto id =
+      fm->timeoutManager_->registerTimeout(std::ref(timeoutFunc), timeout);
+
+  lwaitFiber(std::move(fn), *fm, std::move(mainContextFunc));
+
+  auto posted = waitingFiber_ == POSTED;
+
+  if (!canceled) {
+    fm->timeoutManager_->cancel(id);
+  }
+
+  return posted;
+}
+
+#endif
 
 template <typename C, typename D>
 bool Baton::timed_wait(const std::chrono::time_point<C, D>& timeout) {

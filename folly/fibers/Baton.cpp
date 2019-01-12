@@ -28,6 +28,12 @@ void Baton::wait() {
   wait([]() {});
 }
 
+#if 2
+void Baton::lwait(folly::Function<void(int)> f) {
+  lwait(std::move(f), []() {});
+}
+#endif
+
 void Baton::wait(TimeoutHandler& timeoutHandler) {
   auto timeoutFunc = [this, &timeoutHandler] {
     if (!try_wait()) {
@@ -44,6 +50,12 @@ void Baton::wait(TimeoutHandler& timeoutHandler) {
 bool Baton::timed_wait(TimeoutController::Duration timeout) {
   return timed_wait(timeout, []() {});
 }
+
+#if 2
+bool Baton::timed_lwait(folly::Function<void(int)> f, TimeoutController::Duration timeout) {
+  return timed_lwait(std::move(f), timeout, []() {});
+}
+#endif
 
 void Baton::waitThread() {
   if (spinWaitForEarlyPost()) {
@@ -76,6 +88,14 @@ void Baton::waitThread() {
   }
   throw std::logic_error("Other fiber is already waiting on this baton");
 }
+
+#if 2
+void Baton::lwaitThread(folly::Function<void(int)> f) {
+    f(0);
+    waitThread();
+    f(1);
+}
+#endif
 
 bool Baton::spinWaitForEarlyPost() {
   static_assert(
@@ -131,6 +151,15 @@ bool Baton::timedWaitThread(TimeoutController::Duration timeout) {
   }
   throw std::logic_error("Other fiber is already waiting on this baton");
 }
+
+#if 2
+bool Baton::timedLWaitThread(folly::Function<void(int)> f, TimeoutController::Duration timeout) {
+    f(0);
+    bool res = timedWaitThread(timeout);
+    f(1);
+    return res;
+}
+#endif
 
 void Baton::post() {
   postHelper(POSTED);

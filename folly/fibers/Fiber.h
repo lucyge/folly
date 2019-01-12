@@ -63,6 +63,48 @@ class Fiber {
     return {fiberStackLimit_, fiberStackSize_};
   }
 
+#if 1
+  inline void setFiberId(size_t fiberId) {
+    fiberId_ = fiberId;
+  }
+
+  inline size_t getFiberId() {
+    return fiberId_;
+  }
+
+  inline void setFiberIdInTls(pthread_key_t &fiberKey) {
+    pthread_setspecific(fiberKey, (void *)(&fiberId_));
+  }
+
+  inline void setCtxHdlr(int (*ctxHdlr)(int op, void **ctxp)) {
+    ctxHdlr_ = ctxHdlr;
+  }
+
+  inline void saveCtx() {
+    if (ctxHdlr_ != nullptr)
+        (void) ctxHdlr_(0, &ctx_);
+  }
+
+  inline void restoreCtx() {
+    if ((ctxHdlr_ != nullptr)  && (ctx_ != nullptr))
+        (void) ctxHdlr_(1, &ctx_);
+  }
+#endif
+
+#if 3
+  inline void changePriority(int val) {
+    priority_ += val;
+  }
+
+  inline int getPriority() {
+    return priority_;
+  }
+
+  inline std::thread::id getThreadId() {
+    return threadId_;
+  }
+#endif
+
  private:
   enum State {
     INVALID, /**< Does't have task function */
@@ -99,6 +141,9 @@ class Fiber {
    * @param state New state, must not be RUNNING.
    */
   void preempt(State state);
+#if 2
+  void lpreempt(State state, folly::Function<void(int)> fn);
+#endif
 
   /**
    * Examines how much of the stack we used at this moment and
@@ -176,6 +221,16 @@ class Fiber {
                                            queues */
   folly::IntrusiveListHook globalListHook_; /**< list hook for global list */
   std::thread::id threadId_{};
+
+#if 1
+  size_t fiberId_{0};
+  int (*ctxHdlr_)(int op, void **argsp){nullptr};
+  void *ctx_{nullptr};
+#endif
+
+#if 3
+  int priority_{0};
+#endif
 
 #ifdef FOLLY_SANITIZE_ADDRESS
   void* asanFakeStack_{nullptr};

@@ -80,7 +80,14 @@ TimedMutex::LockResult TimedMutex::lockHelper(WaitFunc&& waitFunc) {
 
 inline void TimedMutex::lock() {
   auto result = lockHelper([](MutexWaiter& waiter) {
+#if 3
+    //changePriority(1);
+#endif
     waiter.baton.wait();
+#if 3
+    //changePriority(-1);
+#endif
+
     return true;
   });
 
@@ -160,7 +167,13 @@ void TimedRWMutex<BatonType>::read_lock() {
     MutexWaiter waiter;
     read_waiters_.push_back(waiter);
     ulock.unlock();
+#if 3
+    //changePriority(1);
+#endif
     waiter.baton.wait();
+#if 3
+    //changePriority(-1);
+#endif
     assert(state_ == State::READ_LOCKED);
     return;
   }
@@ -231,7 +244,13 @@ void TimedRWMutex<BatonType>::write_lock() {
   MutexWaiter waiter;
   write_waiters_.push_back(waiter);
   ulock.unlock();
+#if 3
+  //changePriority(1);
+#endif
   waiter.baton.wait();
+#if 3
+  //changePriority(-1);
+#endif
 }
 
 template <typename BatonType>

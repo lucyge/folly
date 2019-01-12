@@ -64,6 +64,9 @@ bool Semaphore::waitSlow() {
     if (testVal != 0) {
       return false;
     }
+#if 0
+    setWaitingForLock();
+#endif
     // prepare baton and add to queue
     waitList_.push(&waitBaton);
   }

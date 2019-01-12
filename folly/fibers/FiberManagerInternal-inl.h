@@ -75,6 +75,11 @@ inline void FiberManager::activateFiber(Fiber* fiber) {
   };
 #endif
 
+#if 3
+    //if (fiber->getPriority() > 0)
+        //LOG(INFO) << "Run:" << fiber->threadId_ << ":" << fiber->getFiberId() << " " << fiber->getPriority();
+#endif
+
   activeFiber_ = fiber;
   fiber->fiberImpl_.activate();
 }
@@ -117,6 +122,11 @@ inline void FiberManager::runReadyFiber(Fiber* fiber) {
   if (observer_) {
     observer_->starting(reinterpret_cast<uintptr_t>(fiber));
   }
+
+#if 1
+  fiber->setFiberIdInTls(fiberKey_);
+  fiber->restoreCtx();
+#endif
 
   while (fiber->state_ == Fiber::NOT_STARTED ||
          fiber->state_ == Fiber::READY_TO_RUN) {
@@ -194,6 +204,10 @@ inline void FiberManager::loopUntilNoReadyImpl() {
   if (UNLIKELY(!alternateSignalStackRegistered_)) {
     registerAlternateSignalStack();
   }
+#endif 
+
+#if 1
+   initializeFiberKey();
 #endif
 
   // Support nested FiberManagers
@@ -217,12 +231,32 @@ inline void FiberManager::loopUntilNoReadyImpl() {
       auto& fiber = readyFibers_.front();
       readyFibers_.pop_front();
       runReadyFiber(&fiber);
+#if 3
+      remotePriorityReadyQueue_.sweep([this, &hadRemoteFiber](Fiber* fiber) {
+        runReadyFiber(fiber);
+        hadRemoteFiber = true;
+      });
+#endif
     }
+
+#if 3
+    remotePriorityReadyQueue_.sweep([this, &hadRemoteFiber](Fiber* fiber) {
+      runReadyFiber(fiber);
+      hadRemoteFiber = true;
+    });
+#endif
 
     remoteReadyQueue_.sweep([this, &hadRemoteFiber](Fiber* fiber) {
       runReadyFiber(fiber);
       hadRemoteFiber = true;
     });
+
+#if 3
+    remotePriorityReadyQueue_.sweep([this, &hadRemoteFiber](Fiber* fiber) {
+      runReadyFiber(fiber);
+      hadRemoteFiber = true;
+    });
+#endif
 
     remoteTaskQueue_.sweep([this, &hadRemoteFiber](RemoteTask* taskPtr) {
       std::unique_ptr<RemoteTask> task(taskPtr);

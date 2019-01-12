@@ -100,6 +100,9 @@ const LoopController& FiberManager::loopController() const {
 
 bool FiberManager::hasTasks() const {
   return fibersActive_ > 0 || !remoteReadyQueue_.empty() ||
+#if 3
+      !remotePriorityReadyQueue_.empty() ||
+#endif
       !remoteTaskQueue_.empty();
 }
 
@@ -128,6 +131,9 @@ Fiber* FiberManager::getFiber() {
   bool recordStack = (options_.recordStackEvery != 0) &&
       (fiberId_ % options_.recordStackEvery == 0);
   fiber->init(recordStack);
+#if 1
+  fiber->setFiberId(fiberId_);
+#endif
   return fiber;
 }
 
@@ -152,8 +158,21 @@ void FiberManager::remoteReadyInsert(Fiber* fiber) {
   if (observer_) {
     observer_->runnable(reinterpret_cast<uintptr_t>(fiber));
   }
+#if 3
+ if (fiber->getPriority() > 0) {
+   //LOG(INFO) << "Scheduled:" << fiber->threadId_ << ":" << fiber->getFiberId();
+   auto insertHead = [&]() { 
+            //LOG(INFO) << "Added:" << fiber->threadId_ << ":" << fiber->getFiberId();
+            return remotePriorityReadyQueue_.insertHead(fiber); };
+   loopController_->scheduleThreadSafe(std::ref(insertHead));
+ } else {
+   auto insertHead = [&]() { return remoteReadyQueue_.insertHead(fiber); };
+   loopController_->scheduleThreadSafe(std::ref(insertHead));
+ }
+#else
   auto insertHead = [&]() { return remoteReadyQueue_.insertHead(fiber); };
   loopController_->scheduleThreadSafe(std::ref(insertHead));
+#endif
 }
 
 void FiberManager::setObserver(ExecutionObserver* observer) {
@@ -363,5 +382,6 @@ void FiberManager::registerAlternateSignalStack() {
   alternateSignalStackRegistered_ = true;
 }
 #endif
+
 } // namespace fibers
 } // namespace folly

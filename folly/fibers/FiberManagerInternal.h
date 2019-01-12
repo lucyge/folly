@@ -371,6 +371,19 @@ class FiberManager : public ::folly::Executor {
   size_t fibersActive_{0}; /**< number of running or blocked fibers */
   size_t fiberId_{0}; /**< id of last fiber used */
 
+#if 1
+  bool   fiberKeyInitialized_{false};
+  pthread_key_t  fiberKey_;
+
+  inline void  initializeFiberKey() {
+    if (!fiberKeyInitialized_) {
+        pthread_key_create(&fiberKey_, NULL);
+        google::InitGoogleFiberKey(fiberKey_);
+        fiberKeyInitialized_ = true;
+    }
+  }
+#endif
+
   /**
    * Maximum number of active fibers in the last period lasting
    * Options::fibersPoolResizePeriod milliseconds.
@@ -442,6 +455,11 @@ class FiberManager : public ::folly::Executor {
   folly::AtomicIntrusiveLinkedList<RemoteTask, &RemoteTask::nextRemoteTask>
       remoteTaskQueue_;
 
+#if 3
+  folly::AtomicIntrusiveLinkedList<Fiber, &Fiber::nextRemoteReady_>
+      remotePriorityReadyQueue_;
+#endif
+
   std::shared_ptr<TimeoutController> timeoutManager_;
 
   struct FibersPoolResizer {
@@ -497,6 +515,75 @@ inline bool onFiber() {
   auto fm = FiberManager::getFiberManagerUnsafe();
   return fm ? fm->hasActiveFiber() : false;
 }
+
+#if 1
+inline void setCtxHandler(int (*chdlr)(int op, void **argsp)) {
+  auto fm = FiberManager::getFiberManagerUnsafe();
+  if (fm) {
+    auto fb = fm->currentFiber();
+    if (fb)
+        fb->setCtxHdlr(chdlr);
+  } 
+}
+
+inline void saveCtx() {
+  auto fm = FiberManager::getFiberManagerUnsafe();
+  if (fm) {
+    auto fb = fm->currentFiber();
+    if (fb)
+        fb->saveCtx();
+    }
+}
+
+inline void restoreCtx() {
+  auto fm = FiberManager::getFiberManagerUnsafe();
+  if (fm) {
+    auto fb = fm->currentFiber();
+    if (fb)
+        fb->restoreCtx();
+    }
+}
+#endif
+
+#if 3
+inline void changePriority(int inc) {
+  auto fm = FiberManager::getFiberManagerUnsafe();
+  if (fm) {
+    auto fb = fm->currentFiber();
+    if (fb)
+        fb->changePriority(inc);
+    }
+}
+
+inline int getPriority() {
+  auto fm = FiberManager::getFiberManagerUnsafe();
+  if (fm) {
+    auto fb = fm->currentFiber();
+    if (fb)
+        return fb->getPriority();
+    }
+}
+
+inline size_t getFiberId() {
+  auto fm = FiberManager::getFiberManagerUnsafe();
+  if (fm) {
+    auto fb = fm->currentFiber();
+    if (fb) 
+        return fb->getFiberId();
+    }  
+  return (size_t)-1L;
+}
+
+inline std::thread::id getThreadId() {
+  auto fm = FiberManager::getFiberManagerUnsafe();
+  if (fm) {
+    auto fb = fm->currentFiber();
+    if (fb) 
+        return fb->getThreadId();
+    }
+  return (std::thread::id)-1L;
+}
+#endif
 
 /**
  * Add a new task to be executed.

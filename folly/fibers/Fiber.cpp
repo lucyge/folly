@@ -60,7 +60,16 @@ void Fiber::resume() {
   }
 
   if (LIKELY(threadId_ == localThreadId())) {
+#if 3
+    if (priority_ > 0) {
+        //LOG(INFO) << "Added:" << threadId_ << ":" << getFiberId();
+        fiberManager_.readyFibers_.push_front(*this);
+    } else {
+        fiberManager_.readyFibers_.push_back(*this);
+    }
+#else
     fiberManager_.readyFibers_.push_back(*this);
+#endif
     fiberManager_.ensureLoopScheduled();
   } else {
     fiberManager_.remoteReadyInsert(this);
@@ -188,6 +197,37 @@ void Fiber::preempt(State state) {
     preemptImpl();
   }
 }
+
+#if 2
+void Fiber::lpreempt(State state, folly::Function<void(int)> fn) {
+  auto preemptImpl = [&]() mutable {
+    DCHECK_EQ(fiberManager_.activeFiber_, this);
+    DCHECK_EQ(state_, RUNNING);
+    DCHECK_NE(state, RUNNING);
+
+    state_ = state;
+
+    fn(0);
+
+    recordStackPosition();
+
+    fiberManager_.deactivateFiber(this);
+
+    fn(1);
+
+    DCHECK_EQ(fiberManager_.activeFiber_, this);
+    DCHECK_EQ(state_, READY_TO_RUN);
+    state_ = RUNNING;
+  };
+
+  if (fiberManager_.preemptRunner_) {
+    fiberManager_.preemptRunner_->run(std::ref(preemptImpl));
+  } else {
+    preemptImpl();
+  }
+}
+#endif
+
 
 Fiber::LocalData::~LocalData() {
   reset();
