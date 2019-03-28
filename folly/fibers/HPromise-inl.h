@@ -101,7 +101,7 @@ HCollectAll(std::vector<std::shared_ptr<HPromise<T>>> &c) {
     std::atomic<size_t> callbackReferences;
   }; 
 
-  typedef typename folly::Function<void(size_t i, Try<T>&&)> fn_t;
+  //typedef typename folly::Function<void(size_t i, Try<T>&&)> fn_t;
 
   auto ctx =
       std::make_shared<HCollectAllContext>(c.size());
