@@ -182,18 +182,22 @@ void Fiber::preempt(State state) {
 
     state_ = state;
 
+    LOG(WARNING) << "recordStackPosition...";
     recordStackPosition();
 
+    LOG(WARNING) << "set fiber state to be:" << state_ << ", deactivating fiber:" << this->getFiberId();
     fiberManager_.deactivateFiber(this);
 
     DCHECK_EQ(fiberManager_.activeFiber_, this);
     DCHECK_EQ(state_, READY_TO_RUN);
     state_ = RUNNING;
+    LOG(WARNING) << "set fiber state to be:" << state_ << ", fiber id:" << this->getFiberId();
   };
 
   if (fiberManager_.preemptRunner_) {
     fiberManager_.preemptRunner_->run(std::ref(preemptImpl));
   } else {
+	LOG(WARNING) << "calling preempt impl to state:" << state;
     preemptImpl();
   }
 }

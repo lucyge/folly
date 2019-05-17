@@ -162,25 +162,30 @@ bool Baton::timedLWaitThread(folly::Function<void(int)> f, TimeoutController::Du
 #endif
 
 void Baton::post() {
+  LOG(WARNING) << "Baton::post() called";
   postHelper(POSTED);
 }
 
 void Baton::postHelper(intptr_t new_value) {
   auto fiber = waitingFiber_.load();
 
+  LOG(WARNING) << "postHelper: waitingFiber_ is:" << fiber;
   do {
     if (fiber == THREAD_WAITING) {
+      LOG(WARNING) << "waitingFiber_ is THREAD_WAITING";
       assert(new_value == POSTED);
 
       return postThread();
     }
 
     if (fiber == POSTED || fiber == TIMEOUT) {
+      LOG(WARNING) << "waitingFiber_ is POSTED / TIMEOUT";
       return;
     }
   } while (!waitingFiber_.compare_exchange_weak(fiber, new_value));
 
   if (fiber != NO_WAITER) {
+	LOG(WARNING) << "waitingFiber_ is not NO_WAITER, resuming fiber";
     reinterpret_cast<Fiber*>(fiber)->resume();
   }
 }

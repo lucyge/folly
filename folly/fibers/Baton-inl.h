@@ -34,6 +34,7 @@ inline Baton::Baton() : Baton(NO_WAITER) {
 template <typename F>
 void Baton::wait(F&& mainContextFunc) {
   auto fm = FiberManager::getFiberManagerUnsafe();
+  LOG(WARNING) << "Baton::wait, fm->activeFiber_ == nullptr?:" << (!fm->activeFiber_);
   if (!fm || !fm->activeFiber_) {
     mainContextFunc();
     return waitThread();
@@ -59,11 +60,14 @@ template <typename F>
 void Baton::waitFiber(FiberManager& fm, F&& mainContextFunc) {
   auto& waitingFiber = waitingFiber_;
   auto f = [&mainContextFunc, &waitingFiber](Fiber& fiber) mutable {
+	LOG(WARNING) << "calling awaitFunc for fiber:" << fiber.getFiberId();
     auto baton_fiber = waitingFiber.load();
     do {
       if (LIKELY(baton_fiber == NO_WAITER)) {
+    	LOG(WARNING) << "waitingFiber is in NO_WAITER state, continue.";
         continue;
       } else if (baton_fiber == POSTED || baton_fiber == TIMEOUT) {
+    	LOG(WARNING) << "waitingFiber is in POSTED/TIMEOUT state, resume fiber:" << fiber.getFiberId();
         fiber.resume();
         break;
       } else {

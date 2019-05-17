@@ -80,6 +80,7 @@ inline void FiberManager::activateFiber(Fiber* fiber) {
         //LOG(INFO) << "Run:" << fiber->threadId_ << ":" << fiber->getFiberId() << " " << fiber->getPriority();
 #endif
 
+  LOG(WARNING) << "set activeFiber_ to be fiber:" << fiber->getFiberId() << " activating fiber...";
   activeFiber_ = fiber;
   fiber->fiberImpl_.activate();
 }
@@ -130,6 +131,7 @@ inline void FiberManager::runReadyFiber(Fiber* fiber) {
 
   while (fiber->state_ == Fiber::NOT_STARTED ||
          fiber->state_ == Fiber::READY_TO_RUN) {
+	LOG(WARNING) << "runReadyFiber of fiber in state:" << fiber->state_;
     activateFiber(fiber);
     if (fiber->state_ == Fiber::AWAITING_IMMEDIATE) {
       try {
@@ -142,6 +144,7 @@ inline void FiberManager::runReadyFiber(Fiber* fiber) {
     }
   }
 
+  LOG(WARNING) << "runReadyFiber of fiber:" << fiber->getFiberId() << " fiber state:" << fiber->state_;
   if (fiber->state_ == Fiber::AWAITING) {
     awaitFunc_(*fiber);
     awaitFunc_ = nullptr;
@@ -222,12 +225,15 @@ inline void FiberManager::loopUntilNoReadyImpl() {
     std::swap(currentFiberManager_, originalFiberManager);
     CHECK_EQ(this, originalFiberManager);
   };
+  LOG(WARNING) << "FiberManager::loopUntilNoReadyImpl starts";
 
   bool hadRemoteFiber = true;
   while (hadRemoteFiber) {
     hadRemoteFiber = false;
 
+    LOG(WARNING) << "readyFibers_.empty():" << readyFibers_.empty();
     while (!readyFibers_.empty()) {
+      LOG(WARNING) << "in while readyFibers_.size():" << readyFibers_.size();
       auto& fiber = readyFibers_.front();
       readyFibers_.pop_front();
       runReadyFiber(&fiber);
@@ -258,6 +264,7 @@ inline void FiberManager::loopUntilNoReadyImpl() {
     });
 #endif
 
+    LOG(WARNING) << "remoteTaskQueue_.empty():" << remoteTaskQueue_.empty();
     remoteTaskQueue_.sweep([this, &hadRemoteFiber](RemoteTask* taskPtr) {
       std::unique_ptr<RemoteTask> task(taskPtr);
       auto fiber = getFiber();
