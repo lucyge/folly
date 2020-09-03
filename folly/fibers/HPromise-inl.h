@@ -72,20 +72,22 @@ Baton *HPromise<T>::getBaton() {
     return baton_;
 }
 
-template <typename T, class F>
-void hmapSetCallback(std::vector<std::shared_ptr<HPromise<T>>> &c, F func) {
+template <typename T, class F, class F1>
+void hmapSetCallback(std::vector<std::shared_ptr<HPromise<T>>> &c, F func, F1 customF=nullptr) {
   for (size_t i=0; i < c.size(); i++) {
-    c[i]->setCallback([func, i](Try<T>&& t) {
+    c[i]->setCallback([func, i, customF](Try<T>&& t) {
       func(i, std::move(t));
+      if (customF)
+    	  customF();
     });
   }
 }
 
-template <typename T>
+template <typename T, class F>
 std::shared_ptr<HPromise<
   std::vector<
   Try<T>>>>
-HCollectAll(std::vector<std::shared_ptr<HPromise<T>>> &c) {
+HCollectAll(std::vector<std::shared_ptr<HPromise<T>>> &c, F customF=nullptr) {
 
   struct HCollectAllContext {
     HCollectAllContext(size_t n) : results(n) {
@@ -110,7 +112,7 @@ HCollectAll(std::vector<std::shared_ptr<HPromise<T>>> &c) {
     ctx->results[i] = std::move(t);
     if (--ctx->callbackReferences == 0)
         ctx->p->setValue(std::move(ctx->results));
-  });
+  }, customF);
 
   return ctx->p;
 }
