@@ -83,6 +83,8 @@ void takeOwnershipError(bool freeOnError, void* buf,
 
 namespace folly {
 
+std::atomic<uint64_t> IOBuf::bufUsage_{0L};
+
 struct IOBuf::HeapPrefix {
   explicit HeapPrefix(uint16_t flg) : magic(kHeapMagic), flags(flg) {}
   ~HeapPrefix() {
@@ -391,10 +393,29 @@ IOBuf::IOBuf(InternalConstructor,
   assert(data + length <= buf + capacity);
 }
 
+uint64_t
+IOBuf::getBufUsage()
+{
+	return bufUsage_.load();
+}
+
+void
+IOBuf::incrementUsage(uint64_t dataLen)
+{
+	bufUsage_ += dataLen;
+}
+
+void
+IOBuf::decrementUsage(uint64_t dataLen)
+{
+	bufUsage_ -= dataLen;
+}
+
 IOBuf::~IOBuf() {
   // Destroying an IOBuf destroys the entire chain.
   // Users of IOBuf should only explicitly delete the head of any chain.
   // The other elements in the chain will be automatically destroyed.
+  uint64_t len = length();
   while (next_ != this) {
     // Since unlink() returns unique_ptr() and we don't store it,
     // it will automatically delete the unlinked element.
@@ -402,6 +423,7 @@ IOBuf::~IOBuf() {
   }
 
   decrementRefcount();
+  decrementUsage(len);
 }
 
 IOBuf& IOBuf::operator=(IOBuf&& other) noexcept {
