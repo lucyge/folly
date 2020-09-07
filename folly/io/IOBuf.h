@@ -235,6 +235,11 @@ class IOBuf {
 
   typedef void (*FreeFunction)(void* buf, void* userData);
 
+  static std::atomic<uint64_t> bufUsage_;
+  static uint64_t getBufUsage();
+  static void incrementUsage(uint64_t dataLen);
+  static void decrementUsage(uint64_t dataLen);
+
   /**
    * Allocate a new IOBuf object with the requested capacity.
    *
