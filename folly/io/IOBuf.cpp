@@ -43,6 +43,7 @@ enum : uint16_t {
   kIOBufInUse = 0x01,
   // This memory segment contains buffer data that is still in use
   kDataInUse = 0x02,
+  kHedvigData = 0x03,
 };
 
 enum : uint64_t {
@@ -154,7 +155,7 @@ void IOBuf::operator delete(void* ptr) {
 }
 
 void IOBuf::releaseStorage(HeapStorage* storage, uint16_t freeFlags) {
-  CHECK_EQ(storage->prefix.magic, static_cast<uint16_t>(kHeapMagic));
+//  CHECK_EQ(storage->prefix.magic, static_cast<uint16_t>(kHeapMagic));
 
   // Use relaxed memory order here.  If we are unlucky and happen to get
   // out-of-date data the compare_exchange_weak() call below will catch
@@ -166,6 +167,8 @@ void IOBuf::releaseStorage(HeapStorage* storage, uint16_t freeFlags) {
     uint16_t newFlags = uint16_t(flags & ~freeFlags);
     if (newFlags == 0) {
       // The storage space is now unused.  Free it.
+      if (storage->prefix.magic == static_cast<uint16_t>(kHedvigData))
+    	  IOBuf::decrementUsage(storage->buf.length());
       storage->prefix.HeapPrefix::~HeapPrefix();
       free(storage);
       return;
@@ -402,12 +405,37 @@ IOBuf::getBufUsage()
 void
 IOBuf::incrementUsage(uint64_t dataLen)
 {
-	bufUsage_ += dataLen;
+	if (SharedInfo* info = sharedInfo()) {
+		if (info->userData != nullptr) {
+			LOG(WARNING) << "bufUsage_:" << bufUsage_ << ":incrementUsage:" << dataLen;
+			auto* storage = static_cast<HeapStorage*>(info->userData);
+			storage->prefix.magic = kHedvigData;
+			bufUsage_ += dataLen;
+		}
+		else
+		{
+			info->userData = ;
+		}
+	}
+}
+
+uint16_t
+IOBuf::getHeapPrefix()
+{
+	uint16_t ret = 0;
+	if (SharedInfo* info = sharedInfo()) {
+		if (info->userData != nullptr) {
+			auto* storage = static_cast<HeapStorage*>(info->userData);
+			ret = storage->prefix.magic;
+		}
+	}
+	return ret;
 }
 
 void
 IOBuf::decrementUsage(uint64_t dataLen)
 {
+	LOG(WARNING) << "bufUsage_:" << bufUsage_ << ":decrementUsage:" << dataLen;
 	bufUsage_ -= dataLen;
 }
 
@@ -423,7 +451,6 @@ IOBuf::~IOBuf() {
   }
 
   decrementRefcount();
-  decrementUsage(len);
 }
 
 IOBuf& IOBuf::operator=(IOBuf&& other) noexcept {
