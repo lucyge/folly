@@ -167,8 +167,6 @@ void IOBuf::releaseStorage(HeapStorage* storage, uint16_t freeFlags) {
     uint16_t newFlags = uint16_t(flags & ~freeFlags);
     if (newFlags == 0) {
       // The storage space is now unused.  Free it.
-      if (storage->prefix.magic == static_cast<uint16_t>(kHedvigData))
-    	  IOBuf::decrementUsage(storage->buf.length());
       storage->prefix.HeapPrefix::~HeapPrefix();
       free(storage);
       return;
@@ -406,16 +404,22 @@ void
 IOBuf::incrementUsage(uint64_t dataLen)
 {
 	if (SharedInfo* info = sharedInfo()) {
+		if (!info)
+			return;
 		if (info->userData != nullptr) {
-			LOG(WARNING) << "bufUsage_:" << bufUsage_ << ":incrementUsage:" << dataLen;
 			auto* storage = static_cast<HeapStorage*>(info->userData);
 			storage->prefix.magic = kHedvigData;
-			bufUsage_ += dataLen;
+			LOG(WARNING) << "non null userData";
 		}
 		else
 		{
-			info->userData = ;
+			uint16_t* ch = new uint16_t[1];
+			*ch = kHedvigData;
+			info->userData = ch;
+			LOG(WARNING) << "null userData";
 		}
+		LOG(WARNING) << "bufUsage_:" << bufUsage_ << ":incrementUsage:" << capacity() << ":info:" << info;
+		bufUsage_ += capacity();
 	}
 }
 
@@ -424,11 +428,19 @@ IOBuf::getHeapPrefix()
 {
 	uint16_t ret = 0;
 	if (SharedInfo* info = sharedInfo()) {
-		if (info->userData != nullptr) {
+		if (info->userData != nullptr)
+		{
 			auto* storage = static_cast<HeapStorage*>(info->userData);
-			ret = storage->prefix.magic;
+			if (storage != nullptr)
+				ret = storage->prefix.magic;
+			else {
+				uint16_t* ch = (uint16_t*)(info->userData);
+				if (ch != nullptr)
+					ret = *ch;
+			}
 		}
 	}
+	LOG(WARNING) << "getHeapPrefix:" << ret;
 	return ret;
 }
 
@@ -803,6 +815,10 @@ void IOBuf::decrementRefcount() {
 
   // We were the last user.  Free the buffer
   freeExtBuffer();
+  if (getHeapPrefix() == kHedvigData) {
+	  LOG(WARNING) << "info:" << info;
+  	  decrementUsage(capacity());
+  }
 
   // Free the SharedInfo if it was allocated separately.
   //
