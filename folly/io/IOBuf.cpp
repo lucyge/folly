@@ -43,7 +43,7 @@ enum : uint16_t {
   kIOBufInUse = 0x01,
   // This memory segment contains buffer data that is still in use
   kDataInUse = 0x02,
-  kHedvigData = 0x03,
+  kHedvigData = 0x04,
 };
 
 enum : uint64_t {
@@ -406,19 +406,21 @@ IOBuf::incrementUsage(uint64_t dataLen)
 	if (SharedInfo* info = sharedInfo()) {
 		if (!info)
 			return;
+		bool setmagic = false;
+		bool setuserdata = false;
 		if (info->userData != nullptr) {
 			auto* storage = static_cast<HeapStorage*>(info->userData);
 			storage->prefix.magic = kHedvigData;
-			LOG(WARNING) << "non null userData";
-		}
-		else
-		{
+			setmagic = true;
+		} else {
 			uint16_t* ch = new uint16_t[1];
 			*ch = kHedvigData;
 			info->userData = ch;
-			LOG(WARNING) << "null userData";
+			setuserdata = true;
 		}
-		LOG(WARNING) << "bufUsage_:" << bufUsage_ << ":incrementUsage:" << capacity() << ":info:" << info;
+//		LOG(WARNING) << "bufUsage_:" << bufUsage_ << ":incrementUsage:" << capacity()
+//				<< ":info:" << info << ":this iobuf:" << this << ":info->userData:" << (int)*((char*)(info->userData))
+//				<< ":setmagic:" << setmagic << ":setuserdata:" << setuserdata;
 		bufUsage_ += capacity();
 	}
 }
@@ -427,6 +429,9 @@ uint16_t
 IOBuf::getHeapPrefix()
 {
 	uint16_t ret = 0;
+	bool isuserdatanull = false;
+	bool ischnull = false;
+	bool isstoragenull = false;
 	if (SharedInfo* info = sharedInfo()) {
 		if (info->userData != nullptr)
 		{
@@ -434,20 +439,25 @@ IOBuf::getHeapPrefix()
 			if (storage != nullptr)
 				ret = storage->prefix.magic;
 			else {
+				isstoragenull = true;
 				uint16_t* ch = (uint16_t*)(info->userData);
 				if (ch != nullptr)
 					ret = *ch;
+				else
+					ischnull = true;
 			}
 		}
+		else
+			isuserdatanull = true;
 	}
-	LOG(WARNING) << "getHeapPrefix:" << ret;
+//	LOG(WARNING) << "iobuf:" << this <<  " getHeapPrefix:" << ret
+//			<< ":isuserdatanull:" << isuserdatanull << ":ischnull:" << ischnull << ":isstoragenull:" << isstoragenull;
 	return ret;
 }
 
 void
 IOBuf::decrementUsage(uint64_t dataLen)
 {
-	LOG(WARNING) << "bufUsage_:" << bufUsage_ << ":decrementUsage:" << dataLen;
 	bufUsage_ -= dataLen;
 }
 
@@ -461,7 +471,7 @@ IOBuf::~IOBuf() {
     // it will automatically delete the unlinked element.
     (void)next_->unlink();
   }
-
+//  LOG(WARNING) << "destructing iobuf:" << this;
   decrementRefcount();
 }
 
@@ -800,6 +810,7 @@ void IOBuf::decrementRefcount() {
   // by the reference count
   SharedInfo* info = sharedInfo();
   if (!info) {
+//	LOG(WARNING) << "iobuf:" << this << ":info is 0:" << info;
     return;
   }
 
@@ -810,15 +821,18 @@ void IOBuf::decrementRefcount() {
   // If it is 1, we were the only remaining user; if it is greater there are
   // still other users.
   if (newcnt > 1) {
+//	LOG(WARNING) << "iobuf:" << this << ":newcnt:" << newcnt;
     return;
   }
 
+  if (getHeapPrefix() == kHedvigData) {
+//	  LOG(WARNING) << "bufUsage_:" << bufUsage_ << ":decrementUsage:" << capacity()
+//  					  << ":info:" << info << ":this iobuf:" << this;
+	  decrementUsage(capacity());
+  }
   // We were the last user.  Free the buffer
   freeExtBuffer();
-  if (getHeapPrefix() == kHedvigData) {
-	  LOG(WARNING) << "info:" << info;
-  	  decrementUsage(capacity());
-  }
+
 
   // Free the SharedInfo if it was allocated separately.
   //
