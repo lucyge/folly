@@ -43,7 +43,6 @@ enum : uint16_t {
   kIOBufInUse = 0x01,
   // This memory segment contains buffer data that is still in use
   kDataInUse = 0x02,
-  kHedvigData = 0x04,
 };
 
 enum : uint64_t {
@@ -412,58 +411,9 @@ IOBuf::getBufUsage()
 void
 IOBuf::incrementUsage(uint64_t dataLen)
 {
-	/*
-	if (SharedInfo* info = sharedInfo()) {
-		if (!info)
-			return;
-		bool setmagic = false;
-		bool setuserdata = false;
-		if (info->userData != nullptr) {
-			auto* storage = static_cast<HeapStorage*>(info->userData);
-			storage->prefix.magic = kHedvigData;
-			setmagic = true;
-		} else {
-			uint16_t* ch = new uint16_t[1];
-			*ch = kHedvigData;
-			info->userData = ch;
-			setuserdata = true;
-		}
-		bufUsage_ += capacity();
-	}
-	*/
 	LOG(WARNING) << "bufUsage_:" << bufUsage_ << ":incrementUsage:" << dataLen
 			<< ":this iobuf:" << this;
 	bufUsage_ += dataLen;
-}
-
-uint16_t
-IOBuf::getHeapPrefix()
-{
-	uint16_t ret = 0;
-	bool isuserdatanull = false;
-	bool ischnull = false;
-	bool isstoragenull = false;
-	if (SharedInfo* info = sharedInfo()) {
-		if (info->userData != nullptr)
-		{
-			auto* storage = static_cast<HeapStorage*>(info->userData);
-			if (storage != nullptr)
-				ret = storage->prefix.magic;
-			else {
-				isstoragenull = true;
-				uint16_t* ch = (uint16_t*)(info->userData);
-				if (ch != nullptr)
-					ret = *ch;
-				else
-					ischnull = true;
-			}
-		}
-		else
-			isuserdatanull = true;
-	}
-//	LOG(WARNING) << "iobuf:" << this <<  " getHeapPrefix:" << ret
-//			<< ":isuserdatanull:" << isuserdatanull << ":ischnull:" << ischnull << ":isstoragenull:" << isstoragenull;
-	return ret;
 }
 
 void

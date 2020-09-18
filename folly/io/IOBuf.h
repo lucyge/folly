@@ -238,7 +238,6 @@ class IOBuf {
   static std::atomic<int64_t> bufUsage_;
   static uint64_t getBufUsage();
   void incrementUsage(uint64_t dataLen);
-  uint16_t getHeapPrefix();
   void decrementUsage(uint64_t dataLen);
   void decrementUsageFromHedvig(uint64_t dataLen);
 
