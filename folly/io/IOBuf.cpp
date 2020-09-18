@@ -71,7 +71,7 @@ void takeOwnershipError(bool freeOnError, void* buf,
     return;
   }
   try {
-    freeFn(buf, userData);
+    freeFn(nullptr, buf, userData);
   } catch (...) {
     // The user's free function is not allowed to throw.
     // (We are already in the middle of throwing an exception, so
@@ -84,7 +84,7 @@ void takeOwnershipError(bool freeOnError, void* buf,
 
 namespace folly {
 
-std::atomic<uint64_t> IOBuf::bufUsage_{0L};
+std::atomic<int64_t> IOBuf::bufUsage_{0L};
 
 struct IOBuf::HeapPrefix {
   explicit HeapPrefix(uint16_t flg) : magic(kHeapMagic), flags(flg) {}
@@ -155,7 +155,7 @@ void IOBuf::operator delete(void* ptr) {
 }
 
 void IOBuf::releaseStorage(HeapStorage* storage, uint16_t freeFlags) {
-//  CHECK_EQ(storage->prefix.magic, static_cast<uint16_t>(kHeapMagic));
+  CHECK_EQ(storage->prefix.magic, static_cast<uint16_t>(kHeapMagic));
 
   // Use relaxed memory order here.  If we are unlucky and happen to get
   // out-of-date data the compare_exchange_weak() call below will catch
@@ -187,9 +187,18 @@ void IOBuf::releaseStorage(HeapStorage* storage, uint16_t freeFlags) {
   }
 }
 
-void IOBuf::freeInternalBuf(void* /* buf */, void* userData) {
+void IOBuf::freeInternalBuf(IOBuf* /*iobuf*/, void* /* buf */, void* userData) {
   auto* storage = static_cast<HeapStorage*>(userData);
   releaseStorage(storage, kDataInUse);
+}
+
+void IOBuf::freeHedvigBuf(IOBuf* iobuf, void* buf, void* userData)
+{
+	LOG(WARNING) << "freeHedvigBuf, iobuf:" << iobuf;
+	uint32_t* size = (uint32_t*)(userData);
+	iobuf->decrementUsage(*size);
+	free(userData);
+	free(buf);
 }
 
 IOBuf::IOBuf(CreateOp, uint64_t capacity)
@@ -403,6 +412,7 @@ IOBuf::getBufUsage()
 void
 IOBuf::incrementUsage(uint64_t dataLen)
 {
+	/*
 	if (SharedInfo* info = sharedInfo()) {
 		if (!info)
 			return;
@@ -418,11 +428,12 @@ IOBuf::incrementUsage(uint64_t dataLen)
 			info->userData = ch;
 			setuserdata = true;
 		}
-//		LOG(WARNING) << "bufUsage_:" << bufUsage_ << ":incrementUsage:" << capacity()
-//				<< ":info:" << info << ":this iobuf:" << this << ":info->userData:" << (int)*((char*)(info->userData))
-//				<< ":setmagic:" << setmagic << ":setuserdata:" << setuserdata;
 		bufUsage_ += capacity();
 	}
+	*/
+	LOG(WARNING) << "bufUsage_:" << bufUsage_ << ":incrementUsage:" << dataLen
+			<< ":this iobuf:" << this;
+	bufUsage_ += dataLen;
 }
 
 uint16_t
@@ -456,10 +467,24 @@ IOBuf::getHeapPrefix()
 }
 
 void
+IOBuf::decrementUsageFromHedvig(uint64_t dataLen)
+{
+	SharedInfo* info = sharedInfo();
+	DCHECK(info);
+
+	if (info->freeFn != IOBuf::freeHedvigBuf) {
+		LOG(WARNING) << "non-hedvig iobuf:" << this;
+		decrementUsage(dataLen);
+	}
+}
+
+void
 IOBuf::decrementUsage(uint64_t dataLen)
 {
+	LOG(WARNING) << "decrementUsage:" << dataLen;
 	bufUsage_ -= dataLen;
 }
+
 
 IOBuf::~IOBuf() {
   // Destroying an IOBuf destroys the entire chain.
@@ -825,11 +850,11 @@ void IOBuf::decrementRefcount() {
     return;
   }
 
-  if (getHeapPrefix() == kHedvigData) {
+//  if (getHeapPrefix() == kHedvigData) {
 //	  LOG(WARNING) << "bufUsage_:" << bufUsage_ << ":decrementUsage:" << capacity()
 //  					  << ":info:" << info << ":this iobuf:" << this;
-	  decrementUsage(capacity());
-  }
+//	  decrementUsage(capacity());
+//  }
   // We were the last user.  Free the buffer
   freeExtBuffer();
 
@@ -844,6 +869,7 @@ void IOBuf::decrementRefcount() {
   // takeOwnership() store the user's free function with its allocated
   // SharedInfo object.)  However, handling this specially with a flag seems
   // like it shouldn't be problematic.
+  LOG(WARNING) << "this iobuf:" << this << ":" << (int)flags();
   if (flags() & kFlagFreeSharedInfo) {
     delete sharedInfo();
   }
@@ -960,7 +986,7 @@ void IOBuf::freeExtBuffer() {
 
   if (info->freeFn) {
     try {
-      info->freeFn(buf_, info->userData);
+      info->freeFn(this, buf_, info->userData);
     } catch (...) {
       // The user's free function should never throw.  Otherwise we might
       // throw from the IOBuf destructor.  Other code paths like coalesce()

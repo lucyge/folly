@@ -233,13 +233,14 @@ class IOBuf {
   typedef Iterator iterator;
   typedef Iterator const_iterator;
 
-  typedef void (*FreeFunction)(void* buf, void* userData);
+  typedef void (*FreeFunction)(IOBuf* iobuf, void* buf, void* userData);
 
-  static std::atomic<uint64_t> bufUsage_;
+  static std::atomic<int64_t> bufUsage_;
   static uint64_t getBufUsage();
   void incrementUsage(uint64_t dataLen);
   uint16_t getHeapPrefix();
-  static void decrementUsage(uint64_t dataLen);
+  void decrementUsage(uint64_t dataLen);
+  void decrementUsageFromHedvig(uint64_t dataLen);
 
   /**
    * Allocate a new IOBuf object with the requested capacity.
@@ -1259,6 +1260,8 @@ class IOBuf {
   IOBuf(const IOBuf& other);
   IOBuf& operator=(const IOBuf& other);
 
+  static void freeHedvigBuf(IOBuf* iobuf, void* /* buf */, void* userData);
+
  private:
   enum FlagsEnum : uintptr_t {
     // Adding any more flags would not work on 32-bit architectures,
@@ -1325,7 +1328,7 @@ class IOBuf {
                              SharedInfo** infoReturn,
                              uint64_t* capacityReturn);
   static void releaseStorage(HeapStorage* storage, uint16_t freeFlags);
-  static void freeInternalBuf(void* buf, void* userData);
+  static void freeInternalBuf(IOBuf* iobuf, void* buf, void* userData);
 
   /*
    * Member variables
