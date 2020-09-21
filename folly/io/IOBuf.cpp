@@ -186,6 +186,7 @@ void IOBuf::releaseStorage(HeapStorage* storage, uint16_t freeFlags) {
   }
 }
 
+
 void IOBuf::freeInternalBuf(IOBuf* /*iobuf*/, void* /* buf */, void* userData) {
   auto* storage = static_cast<HeapStorage*>(userData);
   releaseStorage(storage, kDataInUse);
@@ -408,6 +409,23 @@ IOBuf::getBufUsage()
 	return bufUsage_.load();
 }
 
+
+bool IOBuf::setHedvigProp(HedvigFunction hedvigFunc, uint32_t size)
+{
+	SharedInfo* info = sharedInfo();
+	DCHECK(info);
+	if (info->size == 0)
+		info->size = size;
+	if (info->hedvigFn == nullptr) {
+		info->hedvigFn = hedvigFunc;
+		LOG(WARNING) << "setHedvigProp iobuf:" << this << ":hedvigFunc:" << hedvigFunc
+				<< ":info->hedvigFn:" << info->hedvigFn << ":size:" << size;
+		return true;
+	}
+	LOG(WARNING) << "setHedvigProp iobuf:" << this << ":already set:" << info->size;
+	return false;
+}
+
 void
 IOBuf::incrementUsage(uint64_t dataLen)
 {
@@ -431,7 +449,7 @@ IOBuf::decrementUsageFromHedvig(uint64_t dataLen)
 void
 IOBuf::decrementUsage(uint64_t dataLen)
 {
-	LOG(WARNING) << "decrementUsage:" << dataLen;
+	LOG(WARNING) << "this iobuf:" << this << "decrementUsage:" << dataLen;
 	bufUsage_ -= dataLen;
 }
 
@@ -785,9 +803,10 @@ void IOBuf::decrementRefcount() {
   // by the reference count
   SharedInfo* info = sharedInfo();
   if (!info) {
-//	LOG(WARNING) << "iobuf:" << this << ":info is 0:" << info;
     return;
   }
+  LOG(WARNING) << "this iobuf:" << this << ":info->hedvigFn:" << info->hedvigFn << ":info->size:"
+		  << info->size;
 
   // Decrement the refcount
   uint32_t newcnt = info->refcount.fetch_sub(
@@ -796,15 +815,9 @@ void IOBuf::decrementRefcount() {
   // If it is 1, we were the only remaining user; if it is greater there are
   // still other users.
   if (newcnt > 1) {
-//	LOG(WARNING) << "iobuf:" << this << ":newcnt:" << newcnt;
     return;
   }
 
-//  if (getHeapPrefix() == kHedvigData) {
-//	  LOG(WARNING) << "bufUsage_:" << bufUsage_ << ":decrementUsage:" << capacity()
-//  					  << ":info:" << info << ":this iobuf:" << this;
-//	  decrementUsage(capacity());
-//  }
   // We were the last user.  Free the buffer
   freeExtBuffer();
 
@@ -933,6 +946,13 @@ void IOBuf::reserveSlow(uint64_t minHeadroom, uint64_t minTailroom) {
 void IOBuf::freeExtBuffer() {
   SharedInfo* info = sharedInfo();
   DCHECK(info);
+
+  LOG(WARNING) << "freeExtBuffer called iobuf:" << this << ":info->hedvigFn:" << info->hedvigFn;
+  if (info->hedvigFn)
+  {
+	  //	  auto hedvigFunc = reinterpret_cast<HedvigFunction>(info->hedvigFn);
+	  info->hedvigFn(info->size);
+  }
 
   if (info->freeFn) {
     try {

@@ -234,8 +234,10 @@ class IOBuf {
   typedef Iterator const_iterator;
 
   typedef void (*FreeFunction)(IOBuf* iobuf, void* buf, void* userData);
+  typedef void (*HedvigFunction) (int32_t size);
 
   static std::atomic<int64_t> bufUsage_;
+  bool setHedvigProp(HedvigFunction hedvigFn, uint32_t size);
   static uint64_t getBufUsage();
   void incrementUsage(uint64_t dataLen);
   void decrementUsage(uint64_t dataLen);
@@ -1278,6 +1280,8 @@ class IOBuf {
     // A pointer to a function to call to free the buffer when the refcount
     // hits 0.  If this is null, free() will be used instead.
     FreeFunction freeFn;
+    HedvigFunction hedvigFn{nullptr};
+    uint32_t size{0};
     void* userData;
     std::atomic<uint32_t> refcount;
     bool externallyShared{false};
