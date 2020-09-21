@@ -83,7 +83,6 @@ void takeOwnershipError(bool freeOnError, void* buf,
 
 namespace folly {
 
-
 struct IOBuf::HeapPrefix {
   explicit HeapPrefix(uint16_t flg) : magic(kHeapMagic), flags(flg) {}
   ~HeapPrefix() {
@@ -184,7 +183,6 @@ void IOBuf::releaseStorage(HeapStorage* storage, uint16_t freeFlags) {
     // we are the last user now, or if we need to try updating the flags again.
   }
 }
-
 
 void IOBuf::freeInternalBuf(void* /* buf */, void* userData) {
   auto* storage = static_cast<HeapStorage*>(userData);
@@ -393,7 +391,6 @@ IOBuf::IOBuf(InternalConstructor,
   assert(data + length <= buf + capacity);
 }
 
-
 bool IOBuf::setHedvigProp(HedvigFunction hedvigFunc, uint32_t size)
 {
 	SharedInfo* info = sharedInfo();
@@ -417,6 +414,7 @@ IOBuf::~IOBuf() {
     // it will automatically delete the unlinked element.
     (void)next_->unlink();
   }
+
   decrementRefcount();
 }
 
