@@ -70,7 +70,7 @@ void takeOwnershipError(bool freeOnError, void* buf,
     return;
   }
   try {
-    freeFn(nullptr, buf, userData);
+    freeFn(buf, userData);
   } catch (...) {
     // The user's free function is not allowed to throw.
     // (We are already in the middle of throwing an exception, so
@@ -83,7 +83,6 @@ void takeOwnershipError(bool freeOnError, void* buf,
 
 namespace folly {
 
-std::atomic<int64_t> IOBuf::bufUsage_{0L};
 
 struct IOBuf::HeapPrefix {
   explicit HeapPrefix(uint16_t flg) : magic(kHeapMagic), flags(flg) {}
@@ -187,18 +186,9 @@ void IOBuf::releaseStorage(HeapStorage* storage, uint16_t freeFlags) {
 }
 
 
-void IOBuf::freeInternalBuf(IOBuf* /*iobuf*/, void* /* buf */, void* userData) {
+void IOBuf::freeInternalBuf(void* /* buf */, void* userData) {
   auto* storage = static_cast<HeapStorage*>(userData);
   releaseStorage(storage, kDataInUse);
-}
-
-void IOBuf::freeHedvigBuf(IOBuf* iobuf, void* buf, void* userData)
-{
-	LOG(WARNING) << "freeHedvigBuf, iobuf:" << iobuf;
-	uint32_t* size = (uint32_t*)(userData);
-	iobuf->decrementUsage(*size);
-	free(userData);
-	free(buf);
 }
 
 IOBuf::IOBuf(CreateOp, uint64_t capacity)
@@ -403,68 +393,30 @@ IOBuf::IOBuf(InternalConstructor,
   assert(data + length <= buf + capacity);
 }
 
-uint64_t
-IOBuf::getBufUsage()
-{
-	return bufUsage_.load();
-}
-
 
 bool IOBuf::setHedvigProp(HedvigFunction hedvigFunc, uint32_t size)
 {
 	SharedInfo* info = sharedInfo();
 	DCHECK(info);
-	if (info->size == 0)
-		info->size = size;
+
 	if (info->hedvigFn == nullptr) {
 		info->hedvigFn = hedvigFunc;
-		LOG(WARNING) << "setHedvigProp iobuf:" << this << ":hedvigFunc:" << hedvigFunc
-				<< ":info->hedvigFn:" << info->hedvigFn << ":size:" << size;
+		if (info->size == 0)
+			info->size = size;
 		return true;
 	}
-	LOG(WARNING) << "setHedvigProp iobuf:" << this << ":already set:" << info->size;
 	return false;
 }
-
-void
-IOBuf::incrementUsage(uint64_t dataLen)
-{
-	LOG(WARNING) << "bufUsage_:" << bufUsage_ << ":incrementUsage:" << dataLen
-			<< ":this iobuf:" << this;
-	bufUsage_ += dataLen;
-}
-
-void
-IOBuf::decrementUsageFromHedvig(uint64_t dataLen)
-{
-	SharedInfo* info = sharedInfo();
-	DCHECK(info);
-
-	if (info->freeFn != IOBuf::freeHedvigBuf) {
-		LOG(WARNING) << "non-hedvig iobuf:" << this;
-		decrementUsage(dataLen);
-	}
-}
-
-void
-IOBuf::decrementUsage(uint64_t dataLen)
-{
-	LOG(WARNING) << "this iobuf:" << this << "decrementUsage:" << dataLen;
-	bufUsage_ -= dataLen;
-}
-
 
 IOBuf::~IOBuf() {
   // Destroying an IOBuf destroys the entire chain.
   // Users of IOBuf should only explicitly delete the head of any chain.
   // The other elements in the chain will be automatically destroyed.
-  uint64_t len = length();
   while (next_ != this) {
     // Since unlink() returns unique_ptr() and we don't store it,
     // it will automatically delete the unlinked element.
     (void)next_->unlink();
   }
-//  LOG(WARNING) << "destructing iobuf:" << this;
   decrementRefcount();
 }
 
@@ -805,8 +757,6 @@ void IOBuf::decrementRefcount() {
   if (!info) {
     return;
   }
-  LOG(WARNING) << "this iobuf:" << this << ":info->hedvigFn:" << info->hedvigFn << ":info->size:"
-		  << info->size;
 
   // Decrement the refcount
   uint32_t newcnt = info->refcount.fetch_sub(
@@ -821,7 +771,6 @@ void IOBuf::decrementRefcount() {
   // We were the last user.  Free the buffer
   freeExtBuffer();
 
-
   // Free the SharedInfo if it was allocated separately.
   //
   // This is only used by takeOwnership().
@@ -832,7 +781,6 @@ void IOBuf::decrementRefcount() {
   // takeOwnership() store the user's free function with its allocated
   // SharedInfo object.)  However, handling this specially with a flag seems
   // like it shouldn't be problematic.
-  LOG(WARNING) << "this iobuf:" << this << ":" << (int)flags();
   if (flags() & kFlagFreeSharedInfo) {
     delete sharedInfo();
   }
@@ -947,16 +895,12 @@ void IOBuf::freeExtBuffer() {
   SharedInfo* info = sharedInfo();
   DCHECK(info);
 
-  LOG(WARNING) << "freeExtBuffer called iobuf:" << this << ":info->hedvigFn:" << info->hedvigFn;
   if (info->hedvigFn)
-  {
-	  //	  auto hedvigFunc = reinterpret_cast<HedvigFunction>(info->hedvigFn);
 	  info->hedvigFn(info->size);
-  }
 
   if (info->freeFn) {
     try {
-      info->freeFn(this, buf_, info->userData);
+      info->freeFn(buf_, info->userData);
     } catch (...) {
       // The user's free function should never throw.  Otherwise we might
       // throw from the IOBuf destructor.  Other code paths like coalesce()
