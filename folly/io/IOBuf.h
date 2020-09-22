@@ -234,9 +234,9 @@ class IOBuf {
   typedef Iterator const_iterator;
 
   typedef void (*FreeFunction)(void* buf, void* userData);
-  typedef void (*HedvigFunction) (uint32_t size);
+  typedef void (*HedvigFunction) (int32_t size);
 
-  bool setHedvigProp(HedvigFunction hedvigFn, uint32_t size);
+  bool setHedvigProp(HedvigFunction hedvigFn, int32_t size);
 
   /**
    * Allocate a new IOBuf object with the requested capacity.

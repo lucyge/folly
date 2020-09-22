@@ -391,7 +391,7 @@ IOBuf::IOBuf(InternalConstructor,
   assert(data + length <= buf + capacity);
 }
 
-bool IOBuf::setHedvigProp(HedvigFunction hedvigFunc, uint32_t size)
+bool IOBuf::setHedvigProp(HedvigFunction hedvigFunc, int32_t size)
 {
 	SharedInfo* info = sharedInfo();
 	DCHECK(info);
