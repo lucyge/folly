@@ -391,6 +391,20 @@ IOBuf::IOBuf(InternalConstructor,
   assert(data + length <= buf + capacity);
 }
 
+bool IOBuf::setHedvigProp(HedvigFunction hedvigFunc, int32_t size)
+{
+	SharedInfo* info = sharedInfo();
+	DCHECK(info);
+
+	if (info->hedvigFn == nullptr) {
+		info->hedvigFn = hedvigFunc;
+		if (info->size == 0)
+			info->size = size;
+		return true;
+	}
+	return false;
+}
+
 IOBuf::~IOBuf() {
   // Destroying an IOBuf destroys the entire chain.
   // Users of IOBuf should only explicitly delete the head of any chain.
@@ -878,6 +892,9 @@ void IOBuf::reserveSlow(uint64_t minHeadroom, uint64_t minTailroom) {
 void IOBuf::freeExtBuffer() {
   SharedInfo* info = sharedInfo();
   DCHECK(info);
+
+  if (info->hedvigFn)
+	  info->hedvigFn(info->size);
 
   if (info->freeFn) {
     try {

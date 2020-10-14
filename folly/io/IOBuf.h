@@ -234,6 +234,9 @@ class IOBuf {
   typedef Iterator const_iterator;
 
   typedef void (*FreeFunction)(void* buf, void* userData);
+  typedef void (*HedvigFunction) (int32_t size);
+
+  bool setHedvigProp(HedvigFunction hedvigFn, int32_t size);
 
   /**
    * Allocate a new IOBuf object with the requested capacity.
@@ -1270,6 +1273,8 @@ class IOBuf {
     // A pointer to a function to call to free the buffer when the refcount
     // hits 0.  If this is null, free() will be used instead.
     FreeFunction freeFn;
+    HedvigFunction hedvigFn{nullptr};
+    uint32_t size{0};
     void* userData;
     std::atomic<uint32_t> refcount;
     bool externallyShared{false};
